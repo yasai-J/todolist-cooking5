@@ -1,0 +1,82 @@
+(()=>{
+'use strict';
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const KEY='myLittleDays.v3';
+const recipes=[
+ ['おにぎり','onigiri.png','onigiri_almost.png','onigiri_done.png'],
+ ['親子丼','oyakodon.png','oyakodon_almost.png','oyakodon_done.png'],
+ ['ラーメン','ramen.png','ramen_almost.png','ramen_done.png'],
+ ['うどん','udon.png','udon_almost.png','udon_done.png'],
+ ['サラダ','salad.png','salad_almost.png','salad_done.png'],
+ ['パフェ','parfait.png','parfait_almost.png','parfait_done.png'],
+ ['パンケーキ','pancakes.png','pancakes_almost.png','pancakes_done.png'],
+ ['グラタン','gratin.png','gratin_almost.png','gratin_done.png'],
+ ['ハンバーグ','hamburger_steak.png','hamburger_steak_almost.png','hamburger_steak_done.png'],
+ ['パスタ','pasta.png','pasta_almost.png','pasta_done.png'],
+ ['カレーライス','curry.png','curry_almost.png','curry_done.png'],
+ ['オムライス','omurice.png','omurice_almost.png','omurice_done.png']
+];
+const moods=[['しょんぼり','mood_0.png'],['ちょっとブルー','mood_1.png'],['ふつう','mood_2.png'],['すこしうれしい','mood_3.png'],['うれしい','mood_4.png'],['とってもハッピー','mood_5.png']];
+const stages=[['準備前',0,19],['準備中',20,39],['調理開始',40,59],['仕上げ中',60,79],['もうすぐ完成',80,99],['完成',100,100]];
+const todayKey=()=>new Date().toLocaleDateString('sv-SE');
+const weekKey=(d=new Date())=>{let x=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));let day=x.getUTCDay()||7;x.setUTCDate(x.getUTCDate()+4-day);let y=x.getUTCFullYear();let start=new Date(Date.UTC(y,0,1));let w=Math.ceil((((x-start)/86400000)+1)/7);return `${y}-W${String(w).padStart(2,'0')}`};
+const monthKey=()=>todayKey().slice(0,7);
+const defaultState=()=>({tasks:[],dailyDone:{},weeklyDone:{},moods:{},dishByDay:{},history:[],created:todayKey()});
+let state=load();
+function load(){try{let x=JSON.parse(localStorage.getItem(KEY));return x&&typeof x==='object'?{...defaultState(),...x}:defaultState()}catch{return defaultState()}}
+function save(){localStorage.setItem(KEY,JSON.stringify(state))}
+function id(){return 't'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function dateLabel(){const d=new Date();return `${d.getFullYear()}.${d.getMonth()+1}.${d.getDate()}（${'日月火水木金土'[d.getDay()]}）`}
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),1800)}
+function isDone(t){if(t.category==='daily')return !!state.dailyDone[todayKey()]?.[t.id];if(t.category==='weekly')return !!state.weeklyDone[weekKey()]?.[t.id];return !!t.completed}
+function setDone(t,v){if(t.category==='daily'){state.dailyDone[todayKey()]??={};state.dailyDone[todayKey()][t.id]=v}else if(t.category==='weekly'){state.weeklyDone[weekKey()]??={};state.weeklyDone[weekKey()][t.id]=v}else{t.completed=v;if(v){t.completedAt=todayKey();state.history.push({id:t.id,name:t.name,date:todayKey(),category:t.category})}else{state.history=state.history.filter(h=>h.id!==t.id)}}save();render()}
+function visibleToday(t){if(t.category==='daily')return !t.days?.length||t.days.includes(new Date().getDay());if(t.category==='weekly')return true;if(t.category==='deadline')return !t.completed;if(t.category==='wish')return !t.completed;return false}
+function dueText(t){if(t.category!=='deadline'||!t.due)return '';const late=t.due<todayKey()&&!t.completed;return `${late?'期限超過':'期限'} ${t.due}${late?' · OVERDUE':''}`}
+function groupLabel(c){return ({daily:'DAILY ROUTINE',weekly:'WEEKLY ROUTINE',deadline:'DEADLINE',wish:'WISH LIST'})[c]}
+function taskRow(t){const done=isDone(t),meta=dueText(t);return `<div class="task-row" data-id="${t.id}"><input class="task-check" type="checkbox" aria-label="${t.name}を完了" ${done?'checked':''}><span class="task-name ${done?'done':''}">${esc(t.name)}</span><span class="task-meta ${meta.includes('OVERDUE')?'overdue':''}">${esc(meta)}</span><button class="task-edit" aria-label="編集">···</button></div>`}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function todayTasks(){return state.tasks.filter(visibleToday).sort((a,b)=>(a.order||0)-(b.order||0))}
+function dailyStats(){const ts=state.tasks.filter(t=>t.category==='daily'&&visibleToday(t));const done=ts.filter(isDone).length;return {done,total:ts.length,pct:ts.length?Math.round(done/ts.length*100):0}}
+function getDish(){let k=todayKey();if(state.dishByDay[k])return state.dishByDay[k];let prev=state.dishByDay[Object.keys(state.dishByDay).sort().at(-1)];let pool=recipes.map((_,i)=>i).filter(i=>i!==prev);let n=pool[Math.floor(Math.random()*pool.length)];state.dishByDay[k]=n;save();return n}
+function currentStage(p){return p===100?5:stages.findIndex(s=>p>=s[1]&&p<=s[2])}
+function chefIllustration(stage){return ['chef_base.png','chef_cut.png','chef_fry.png','mascot_cooking_base.png','mascot_cooking_cut.png','chef_base.png'][stage]||'chef_base.png'}
+function renderHome(){
+ const st=dailyStats();$('#dailyPct').textContent=st.pct+'%';$('#dailyBar').style.width=st.pct+'%';$('#dailyCount').textContent=`${st.done} / ${st.total} 完了`;
+ const stage=currentStage(st.pct);$('#stageName').textContent=stages[stage][0];$('#mascotMain').src=chefIllustration(stage);
+ const r=recipes[getDish()];$('#todayDishName').textContent=`今日のごはん：${r[0]}`;
+ const tasks=todayTasks();$('#homeTasks').innerHTML=['daily','weekly','deadline','wish'].map(c=>{let list=tasks.filter(t=>t.category===c);return list.length?`<div class="task-group ${c}"><div class="task-group-title">${groupLabel(c)}</div>${list.map(taskRow).join('')}</div>`:''}).join('')||'<div class="empty-state">今日のタスクはまだありません。</div>';
+ $$('#homeTasks .task-row').forEach(row=>{let t=state.tasks.find(x=>x.id===row.dataset.id);row.querySelector('.task-check').onchange=e=>setDone(t,e.target.checked);row.querySelector('.task-edit').onclick=()=>openTask(t)});
+ const mood=state.moods[todayKey()];$('#moodOptions').innerHTML=moods.map((m,i)=>`<button class="mood-choice ${mood===i?'selected':''}" data-mood="${i}" aria-label="${m[0]}"><img src="${m[1]}" alt="${m[0]}"></button>`).join('');
+ $$('#moodOptions button').forEach(b=>b.onclick=()=>{state.moods[todayKey()]=+b.dataset.mood;save();renderHome();toast('今日の気分を記録しました')});
+ $('#moodSaved').textContent=mood===undefined?'気分を選んで記録できます。':`今日の気分：${moods[mood][0]}`;
+}
+function renderMeal(){let r=recipes[getDish()],p=dailyStats().pct,st=stages[currentStage(p)][0],si=currentStage(p);$('#mealDish').src=si===4?r[2]:si===5?r[3]:r[1];$('#mealName').textContent=r[0];$('#mealStage').textContent=`${st} · 達成率 ${p}%`;$('#stageList').innerHTML=stages.map((s,i)=>`<div class="stage-item"><strong>${s[0]}</strong>${i===5?'100%':`${s[1]}〜${s[2]}%`}</div>`).join('')}
+function renderRecipes(filter='all'){let unlock=unlockedCount();$('#recipeGrid').innerHTML=recipes.map((r,i)=>({r,i,ok:i<unlock})).filter(x=>filter==='all'||(filter==='unlocked'?x.ok:!x.ok)).map(x=>`<div class="recipe-card ${x.ok?'':'locked'}"><img src="${x.r[1]}" alt="${x.r[0]}"><span>${x.r[0]}</span></div>`).join('')}
+function monthRate(){const [yy,mm]=monthKey().split('-').map(Number),days=new Date(yy,mm,0).getDate();let total=0,done=0;for(const t of state.tasks){if(t.category==='daily'){for(let d=1;d<=days;d++){const date=new Date(yy,mm-1,d),k=date.toLocaleDateString('sv-SE');if(!t.days?.length||t.days.includes(date.getDay())){total++;if(state.dailyDone[k]?.[t.id])done++}}}else if(t.category==='weekly'){let seen=new Set();for(let d=1;d<=days;d++){const k=weekKey(new Date(yy,mm-1,d));if(!seen.has(k)){seen.add(k);total++;if(state.weeklyDone[k]?.[t.id])done++}}}else if(t.category==='deadline'&&t.due?.startsWith(monthKey())){total++;if(t.completed)done++}}return total?Math.round(done/total*100):0}
+function unlockedCount(){let p=monthRate();return p>=100?recipes.length:p>=90?10:p>=80?7:p>=60?4:0}
+function renderRecords(){
+ const p=monthRate();$('#monthLabel').textContent=monthKey().replace('-',' / ');$('#monthPct').textContent=p+'%';$('#monthBar').style.width=p+'%';
+ $('#unlockList').innerHTML=[[60,'レシピを4種類解放'],[80,'レシピをさらに3種類解放'],[90,'特別レシピを解放'],[100,'すべてのレシピをコンプリート']].map(([v,l])=>`<div class="unlock-row"><span>${v}%　${l}</span><b>${p>=v?'✓':'—'}</b></div>`).join('');
+ let d=new Date(),day=(d.getDay()+6)%7,start=new Date(d);start.setDate(d.getDate()-day);let labels=['月','火','水','木','金','土','日'];let vals=labels.map((_,i)=>{let x=new Date(start);x.setDate(start.getDate()+i);let k=x.toLocaleDateString('sv-SE');let arr=state.dailyDone[k]||{};let total=state.tasks.filter(t=>t.category==='daily'&&(!t.days?.length||t.days.includes(x.getDay()))).length;let done=Object.values(arr).filter(Boolean).length;return total?Math.round(done/total*100):0});
+ $('#weekLabel').textContent=`${start.getMonth()+1}/${start.getDate()} 〜 ${d.getMonth()+1}/${d.getDate()}`;$('#weekChart').innerHTML=labels.map((l,i)=>`<div class="day-bar ${i===day?'today':''}"><div class="day-bar-fill" style="height:${Math.max(3,vals[i])}%"></div><span>${l}</span></div>`).join('');$('#weekSummary').textContent=`今週のDAILY ROUTINE平均：${Math.round(vals.reduce((a,b)=>a+b,0)/7)}%`;
+ let hist=Array.from({length:7},(_,i)=>{let x=new Date();x.setDate(x.getDate()-(6-i));let k=x.toLocaleDateString('sv-SE');return {k,d:x.getDate(),m:state.moods[k]}});$('#moodHistory').innerHTML=hist.map(x=>`<div class="history-day">${x.d}<img src="${x.m===undefined?'mood_2.png':moods[x.m][1]}" alt="">${x.m===undefined?'—':moods[x.m][0]}</div>`).join('');
+}
+function render(){renderHome();renderMeal();renderRecords();renderRecipes($('.filter.active')?.dataset.filter||'all');}
+function showPage(id){$$('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+id));$$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.page===id));window.scrollTo(0,0)}
+$$('.nav-item').forEach(b=>b.onclick=()=>showPage(b.dataset.page));
+$('#todayDate').textContent=dateLabel();
+$('#changeDish').onclick=$('#mealChange').onclick=()=>{let prev=getDish(),pool=recipes.map((_,i)=>i).filter(i=>i!==prev);state.dishByDay[todayKey()]=pool[Math.floor(Math.random()*pool.length)];save();render();toast('今日のごはんを変更しました')};
+$$('.filter').forEach(b=>b.onclick=()=>{$$('.filter').forEach(x=>x.classList.toggle('active',x===b));renderRecipes(b.dataset.filter)});
+const dlg=$('#taskDialog'), weekdays=['日','月','火','水','木','金','土'];
+$('#weekdayPicks').innerHTML=weekdays.map((d,i)=>`<label><input type="checkbox" value="${i}" ${[1,2,3,4,5].includes(i)?'checked':''}><span>${d}</span></label>`).join('');
+function updateFields(){let c=$('#taskCategory').value;$('#dailyFields').hidden=c!=='daily';$('#deadlineFields').hidden=c!=='deadline'}
+$('#taskCategory').onchange=updateFields;
+function openTask(t=null){$('#taskForm').dataset.id=t?.id||'';$('#dialogTitle').textContent=t?'タスクを編集':'タスクを追加';$('#taskName').value=t?.name||'';$('#taskCategory').value=t?.category||'daily';$('#taskDue').value=t?.due||'';$$('#weekdayPicks input').forEach(x=>x.checked=t?.days?t.days.includes(+x.value):[1,2,3,4,5].includes(+x.value));$('#deleteTask').hidden=!t;updateFields();dlg.showModal()}
+$('#addTask').onclick=()=>openTask();$('#closeDialog').onclick=()=>dlg.close();
+$('#taskForm').onsubmit=e=>{e.preventDefault();let name=$('#taskName').value.trim();if(!name)return;let c=$('#taskCategory').value;let t=state.tasks.find(x=>x.id===$('#taskForm').dataset.id);let data={id:t?.id||id(),name,category:c,days:c==='daily'?$$('#weekdayPicks input:checked').map(x=>+x.value):[],due:c==='deadline'?$('#taskDue').value:'',order:t?.order??state.tasks.length};if(t)Object.assign(t,data);else state.tasks.push(data);save();dlg.close();render();toast(t?'タスクを更新しました':'タスクを追加しました')};
+$('#deleteTask').onclick=()=>{let t=state.tasks.find(x=>x.id===$('#taskForm').dataset.id);if(!t)return;if(confirm(`「${t.name}」を削除しますか？`)){state.tasks=state.tasks.filter(x=>x.id!==t.id);save();dlg.close();render();toast('削除しました')}};
+$('#exportData').onclick=()=>{let blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`my-little-days-${todayKey()}.json`;a.click();URL.revokeObjectURL(a.href)};
+$('#importData').onchange=async e=>{let f=e.target.files[0];if(!f)return;try{let x=JSON.parse(await f.text());if(!x||!Array.isArray(x.tasks))throw Error();if(confirm('現在のデータを読み込んだ内容で上書きします。よろしいですか？')){state={...defaultState(),...x};save();render();toast('バックアップを復元しました')}}catch{alert('JSONファイルを読み込めませんでした')}e.target.value=''};
+if('serviceWorker'in navigator && location.protocol.startsWith('http'))window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+render();
+})();
